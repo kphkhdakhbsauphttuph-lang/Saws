@@ -1,0 +1,807 @@
+-- StarterPlayer/StarterPlayerScripts/HitboxClient
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage:WaitForChild("HitboxConfig"))
+local Remote = Config.Remote
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- ค่าตั้งต้น
+local Settings = {}
+for k, v in pairs(Config.Settings) do
+    Settings[k] = v
+end
+
+-- ==========================================
+-- 🎨 ธีมสี
+-- ==========================================
+local Theme = {
+    Background = Color3.fromRGB(20, 20, 28),
+    Surface = Color3.fromRGB(30, 30, 40),
+    SurfaceLight = Color3.fromRGB(45, 45, 60),
+    Accent = Color3.fromRGB(100, 150, 255),
+    AccentDark = Color3.fromRGB(60, 100, 200),
+    Text = Color3.fromRGB(240, 240, 250),
+    TextDim = Color3.fromRGB(150, 150, 170),
+    Success = Color3.fromRGB(80, 200, 120),
+    Danger = Color3.fromRGB(220, 70, 70),
+    Warning = Color3.fromRGB(240, 180, 60),
+}
+
+-- ==========================================
+-- 🎨 ฟังก์ชันช่วยสร้าง UI
+-- ==========================================
+local function corner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 8)
+    c.Parent = parent
+    return c
+end
+
+local function stroke(parent, color, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color or Theme.SurfaceLight
+    s.Thickness = thickness or 1
+    s.Transparency = transparency or 0.5
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+local function padding(parent, px)
+    local p = Instance.new("UIPadding")
+    p.PaddingTop = UDim.new(0, px)
+    p.PaddingBottom = UDim.new(0, px)
+    p.PaddingLeft = UDim.new(0, px)
+    p.PaddingRight = UDim.new(0, px)
+    p.Parent = parent
+    return p
+end
+
+local function gradient(parent, c1, c2, rotation)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new(c1, c2)
+    g.Rotation = rotation or 90
+    g.Parent = parent
+    return g
+end
+
+-- ==========================================
+-- 🖥️ สร้าง ScreenGui หลัก
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "HitboxESP_UI"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- ==========================================
+-- 🎯 ปุ่ม Toggle เปิด/ปิด UI (มุมซ้ายล่าง)
+-- ==========================================
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "ToggleBtn"
+toggleBtn.Size = UDim2.new(0, 55, 0, 55)
+toggleBtn.Position = UDim2.new(0, 20, 1, -80)
+toggleBtn.BackgroundColor3 = Theme.Accent
+toggleBtn.Text = "⚙"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 26
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.AutoButtonColor = false
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Parent = screenGui
+corner(toggleBtn, 28)
+stroke(toggleBtn, Theme.Accent, 2, 0.3)
+gradient(toggleBtn, Theme.Accent, Theme.AccentDark, 45)
+
+-- ==========================================
+-- 🎨 Main Window
+-- ==========================================
+local main = Instance.new("Frame")
+main.Name = "MainWindow"
+main.Size = UDim2.new(0, 300, 0, 500)
+main.Position = UDim2.new(0.5, -150, 0.5, -250)
+main.BackgroundColor3 = Theme.Background
+main.BorderSizePixel = 0
+main.Visible = false
+main.Active = true
+main.Draggable = true
+main.ClipsDescendants = false
+main.Parent = screenGui
+
+corner(main, 12)
+stroke(main, Theme.SurfaceLight, 1.5, 0.3)
+
+-- เงา
+local shadow = Instance.new("ImageLabel")
+shadow.Name = "Shadow"
+shadow.Size = UDim2.new(1, 40, 1, 40)
+shadow.Position = UDim2.new(0, -20, 0, -20)
+shadow.BackgroundTransparency = 1
+shadow.Image = "rbxassetid://5028857084"
+shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+shadow.ImageTransparency = 0.5
+shadow.ScaleType = Enum.ScaleType.Slice
+shadow.SliceCenter = Rect.new(24, 24, 276, 276)
+shadow.ZIndex = -1
+shadow.Parent = main
+
+-- ==========================================
+-- 📌 Title Bar
+-- ==========================================
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 48)
+titleBar.BackgroundColor3 = Theme.Surface
+titleBar.BorderSizePixel = 0
+titleBar.Parent = main
+corner(titleBar, 12)
+
+-- ปิดมุมล่างของ titleBar ให้ตรง
+local titleFix = Instance.new("Frame")
+titleFix.Size = UDim2.new(1, 0, 0, 12)
+titleFix.Position = UDim2.new(0, 0, 1, -12)
+titleFix.BackgroundColor3 = Theme.Surface
+titleFix.BorderSizePixel = 0
+titleFix.Parent = titleBar
+
+gradient(titleBar, Theme.AccentDark, Theme.Surface, 90)
+
+-- ไอคอน
+local titleIcon = Instance.new("TextLabel")
+titleIcon.Size = UDim2.new(0, 40, 1, 0)
+titleIcon.Position = UDim2.new(0, 5, 0, 0)
+titleIcon.BackgroundTransparency = 1
+titleIcon.Text = "🎯"
+titleIcon.TextSize = 22
+titleIcon.Font = Enum.Font.GothamBold
+titleIcon.Parent = titleBar
+
+-- ชื่อ
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1, -100, 1, 0)
+titleText.Position = UDim2.new(0, 45, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "HITBOX + ESP"
+titleText.TextColor3 = Theme.Text
+titleText.TextSize = 16
+titleText.Font = Enum.Font.GothamBold
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = titleBar
+
+-- ปุ่มปิด
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -38, 0, 9)
+closeBtn.BackgroundColor3 = Theme.Danger
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.TextSize = 14
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.BorderSizePixel = 0
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = titleBar
+corner(closeBtn, 6)
+
+-- ==========================================
+-- 📜 Container สำหรับ Scroll
+-- ==========================================
+local scroll = Instance.new("ScrollingFrame")
+scroll.Name = "Content"
+scroll.Size = UDim2.new(1, -20, 1, -70)
+scroll.Position = UDim2.new(0, 10, 0, 58)
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 4
+scroll.ScrollBarImageColor3 = Theme.Accent
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.Parent = main
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 10)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = scroll
+
+-- ==========================================
+-- 🔧 ฟังก์ชันสร้าง Section Header
+-- ==========================================
+local function createSection(name, icon)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 28)
+    frame.BackgroundTransparency = 1
+    frame.Parent = scroll
+    
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(1, 0, 0, 1)
+    line.Position = UDim2.new(0, 0, 0.5, 0)
+    line.BackgroundColor3 = Theme.SurfaceLight
+    line.BorderSizePixel = 0
+    line.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 150, 1, 0)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundColor3 = Theme.Background
+    label.BackgroundTransparency = 0
+    label.Text = "  " .. (icon or "▶") .. "  " .. name
+    label.TextColor3 = Theme.Accent
+    label.TextSize = 12
+    label.Font = Enum.Font.GothamBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.BorderSizePixel = 0
+    label.Parent = frame
+    
+    return frame
+end
+
+-- ==========================================
+-- 🎚️ ฟังก์ชันสร้าง Slider
+-- ==========================================
+local function createSlider(name, min, max, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 50)
+    container.BackgroundColor3 = Theme.Surface
+    container.BorderSizePixel = 0
+    container.Parent = scroll
+    corner(container, 8)
+    padding(container, 8)
+    
+    -- Label
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, -60, 0, 16)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Theme.Text
+    label.TextSize = 12
+    label.Font = Enum.Font.GothamMedium
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    -- Value
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Name = "Value"
+    valueLabel.Size = UDim2.new(0, 60, 0, 16)
+    valueLabel.Position = UDim2.new(1, -60, 0, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = tostring(default)
+    valueLabel.TextColor3 = Theme.Accent
+    valueLabel.TextSize = 12
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valueLabel.Parent = container
+    
+    -- Track
+    local track = Instance.new("Frame")
+    track.Name = "Track"
+    track.Size = UDim2.new(1, 0, 0, 6)
+    track.Position = UDim2.new(0, 0, 1, -12)
+    track.BackgroundColor3 = Theme.SurfaceLight
+    track.BorderSizePixel = 0
+    track.Parent = container
+    corner(track, 3)
+    
+    -- Fill
+    local fill = Instance.new("Frame")
+    fill.Name = "Fill"
+    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Theme.Accent
+    fill.BorderSizePixel = 0
+    fill.Parent = track
+    corner(fill, 3)
+    gradient(fill, Theme.Accent, Theme.AccentDark, 0)
+    
+    -- Knob
+    local knob = Instance.new("Frame")
+    knob.Name = "Knob"
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.Position = UDim2.new((default - min) / (max - min), -7, 0.5, -7)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 2
+    knob.Parent = track
+    corner(knob, 7)
+    stroke(knob, Theme.Accent, 2, 0)
+    
+    -- Button
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = container
+    
+    local dragging = false
+    local currentValue = default
+    
+    local function update(input)
+        local mouseX = input.Position.X
+        local relX = (mouseX - track.AbsolutePosition.X) / track.AbsoluteSize.X
+        relX = math.clamp(relX, 0, 1)
+        fill.Size = UDim2.new(relX, 0, 1, 0)
+        knob.Position = UDim2.new(relX, -7, 0.5, -7)
+        
+        local value = min + (max - min) * relX
+        if max - min >= 10 then
+            value = math.floor(value)
+        else
+            value = math.floor(value * 10) / 10
+        end
+        currentValue = value
+        valueLabel.Text = tostring(value)
+        callback(value)
+    end
+    
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            update(input)
+            TweenService:Create(knob, TweenInfo.new(0.1), {Size = UDim2.new(0, 18, 0, 18)}):Play()
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement 
+           or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            TweenService:Create(knob, TweenInfo.new(0.1), {Size = UDim2.new(0, 14, 0, 14)}):Play()
+        end
+    end)
+    
+    return container
+end
+
+-- ==========================================
+-- 🔘 ฟังก์ชันสร้าง Toggle
+-- ==========================================
+local function createToggle(name, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 40)
+    container.BackgroundColor3 = Theme.Surface
+    container.BorderSizePixel = 0
+    container.Parent = scroll
+    corner(container, 8)
+    padding(container, 8)
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -60, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Theme.Text
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamMedium
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    -- Switch background
+    local switchBg = Instance.new("Frame")
+    switchBg.Size = UDim2.new(0, 44, 0, 22)
+    switchBg.Position = UDim2.new(1, -44, 0.5, -11)
+    switchBg.BackgroundColor3 = default and Theme.Success or Theme.SurfaceLight
+    switchBg.BorderSizePixel = 0
+    switchBg.Parent = container
+    corner(switchBg, 11)
+    
+    -- Knob
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 18, 0, 18)
+    knob.Position = default and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel = 0
+    knob.Parent = switchBg
+    corner(knob, 9)
+    
+    -- Button
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = container
+    
+    local state = default
+    
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        TweenService:Create(switchBg, TweenInfo.new(0.2), {
+            BackgroundColor3 = state and Theme.Success or Theme.SurfaceLight
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2), {
+            Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+        }):Play()
+        callback(state)
+    end)
+    
+    return container
+end
+
+-- ==========================================
+-- 🎨 ฟังก์ชันสร้าง Color Picker แบบง่าย
+-- ==========================================
+local function createColorPicker(name, default, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 40)
+    container.BackgroundColor3 = Theme.Surface
+    container.BorderSizePixel = 0
+    container.Parent = scroll
+    corner(container, 8)
+    padding(container, 8)
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -60, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Theme.Text
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamMedium
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    local colorBtn = Instance.new("TextButton")
+    colorBtn.Size = UDim2.new(0, 44, 0, 22)
+    colorBtn.Position = UDim2.new(1, -44, 0.5, -11)
+    colorBtn.BackgroundColor3 = default
+    colorBtn.Text = ""
+    colorBtn.BorderSizePixel = 0
+    colorBtn.Parent = container
+    corner(colorBtn, 6)
+    stroke(colorBtn, Color3.fromRGB(255, 255, 255), 1, 0.7)
+    
+    local colors = {
+        Color3.fromRGB(255, 60, 60),
+        Color3.fromRGB(60, 150, 255),
+        Color3.fromRGB(80, 220, 120),
+        Color3.fromRGB(255, 200, 60),
+        Color3.fromRGB(200, 80, 255),
+        Color3.fromRGB(255, 130, 60),
+        Color3.fromRGB(255, 255, 255),
+    }
+    local colorIndex = 1
+    
+    colorBtn.MouseButton1Click:Connect(function()
+        colorIndex = colorIndex % #colors + 1
+        colorBtn.BackgroundColor3 = colors[colorIndex]
+        callback(colors[colorIndex])
+    end)
+    
+    return container
+end
+
+-- ==========================================
+-- 🔘 ปุ่มโจมตี
+-- ==========================================
+local function createAttackButton()
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 45)
+    btn.BackgroundColor3 = Theme.Danger
+    btn.Text = "⚔  โจมตี"
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 15
+    btn.Font = Enum.Font.GothamBold
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
+    btn.Parent = scroll
+    corner(btn, 8)
+    gradient(btn, Theme.Danger, Color3.fromRGB(160, 40, 40), 90)
+    
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(255, 90, 90)
+        }):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Theme.Danger
+        }):Play()
+    end)
+    
+    btn.MouseButton1Click:Connect(function()
+        Remote:FireServer("Attack", {
+            Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize),
+            Damage = Settings.HitboxDamage,
+        })
+        -- Animation
+        TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(0.95, 0, 0, 45)}):Play()
+        task.wait(0.1)
+        TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1, 0, 0, 45)}):Play()
+    end)
+    
+    return btn
+end
+
+-- ==========================================
+-- 📋 สร้าง UI ทั้งหมด
+-- ==========================================
+createSection("HITBOX", "🎯")
+createSlider("ขนาด Hitbox", 1, 30, Settings.HitboxSize, function(v)
+    Settings.HitboxSize = v
+    Remote:FireServer("UpdateSettings", {HitboxSize = v})
+end)
+createSlider("ดาเมจ", 1, 100, Settings.HitboxDamage, function(v)
+    Settings.HitboxDamage = v
+end)
+
+createSection("ESP", "👁")
+createToggle("เปิด ESP", Settings.ESPEnabled, function(v)
+    Settings.ESPEnabled = v
+    Remote:FireServer("UpdateSettings", {ESPEnabled = v})
+end)
+createToggle("แสดงชื่อ", Settings.ShowName, function(v)
+    Settings.ShowName = v
+end)
+createToggle("แสดงระยะ", Settings.ShowDistance, function(v)
+    Settings.ShowDistance = v
+end)
+createToggle("แสดงเลือด", Settings.ShowHealth, function(v)
+    Settings.ShowHealth = v
+end)
+createToggle("กรอบ Box", Settings.ShowBox, function(v)
+    Settings.ShowBox = v
+end)
+createColorPicker("สี ESP", Settings.ESPColor, function(c)
+    Settings.ESPColor = c
+end)
+createSlider("ระยะ ESP", 50, 2000, Settings.MaxDistance, function(v)
+    Settings.MaxDistance = v
+end)
+
+createSection("อื่นๆ", "⚡")
+createToggle("Team Check", Settings.TeamCheck, function(v)
+    Settings.TeamCheck = v
+end)
+
+createAttackButton()
+
+-- ==========================================
+-- 🎬 Animation เปิด/ปิด UI
+-- ==========================================
+local isOpen = false
+
+local function openUI()
+    if isOpen then return end
+    isOpen = true
+    main.Visible = true
+    main.Size = UDim2.new(0, 280, 0, 460)
+    main.Position = UDim2.new(0.5, -140, 0.5, -230)
+    TweenService:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 300, 0, 500),
+        Position = UDim2.new(0.5, -150, 0.5, -250),
+    }):Play()
+    TweenService:Create(toggleBtn, TweenInfo.new(0.2), {
+        BackgroundColor3 = Theme.Danger
+    }):Play()
+end
+
+local function closeUI()
+    if not isOpen then return end
+    isOpen = false
+    TweenService:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 260, 0, 440),
+        Position = UDim2.new(0.5, -130, 0.5, -220),
+    }):Play()
+    task.wait(0.2)
+    main.Visible = false
+    TweenService:Create(toggleBtn, TweenInfo.new(0.2), {
+        BackgroundColor3 = Theme.Accent
+    }):Play()
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+    if isOpen then closeUI() else openUI() end
+end)
+
+closeBtn.MouseButton1Click:Connect(closeUI)
+
+-- Keyboard shortcuts
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        if isOpen then closeUI() else openUI() end
+    elseif input.KeyCode == Enum.KeyCode.F then
+        Remote:FireServer("Attack", {
+            Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize),
+            Damage = Settings.HitboxDamage,
+        })
+    end
+end)
+
+-- ==========================================
+-- 👁️ ระบบ ESP
+-- ==========================================
+local espObjects = {}
+
+local function createESP(targetPlayer)
+    if targetPlayer == player then return end
+    if espObjects[targetPlayer] then return end
+    
+    local data = {
+        Player = targetPlayer,
+        Connections = {},
+    }
+    
+    espObjects[targetPlayer] = data
+end
+
+local function removeESP(targetPlayer)
+    local data = espObjects[targetPlayer]
+    if not data then return end
+    
+    for _, obj in pairs(data) do
+        if typeof(obj) == "Instance" then obj:Destroy() end
+    end
+    for _, conn in pairs(data.Connections or {}) do
+        if typeof(conn) == "RBXScriptConnection" then conn:Disconnect() end
+    end
+    
+    espObjects[targetPlayer] = nil
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    createESP(p)
+end
+Players.PlayerAdded:Connect(createESP)
+Players.PlayerRemoving:Connect(removeESP)
+
+-- อัปเดต ESP ทุกเฟรม
+RunService.RenderStepped:Connect(function()
+    local myChar = player.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    
+    for targetPlayer, data in pairs(espObjects) do
+        local char = targetPlayer.Character
+        local head = char and char:FindFirstChild("Head")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        
+        local visible = Settings.ESPEnabled and char and head and hrp and humanoid and humanoid.Health > 0
+        
+        -- Team check
+        if visible and Settings.TeamCheck and player.Team and targetPlayer.Team == player.Team then
+            visible = false
+        end
+        
+        -- ระยะไกลเกิน
+        if visible and myRoot then
+            local dist = (myRoot.Position - hrp.Position).Magnitude
+            if dist > Settings.MaxDistance then visible = false end
+        end
+        
+        if not visible then
+            if data.Highlight then data.Highlight.Enabled = false end
+            if data.Box then data.Box.Enabled = false end
+            if data.NameTag then data.NameTag.Enabled = false end
+            if data.HealthTag then data.HealthTag.Enabled = false end
+            continue
+        end
+        
+        -- Highlight
+        if not data.Highlight then
+            local hl = Instance.new("Highlight")
+            hl.Name = "ESP_HL"
+            hl.FillTransparency = 0.6
+            hl.OutlineTransparency = 0
+            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            hl.Parent = char
+            data.Highlight = hl
+        end
+        data.Highlight.Enabled = true
+        data.Highlight.Adornee = char
+        data.Highlight.FillColor = Settings.ESPColor
+        data.Highlight.OutlineColor = Settings.ESPColor
+        
+        -- Name Tag
+        if not data.NameTag then
+            local bb = Instance.new("BillboardGui")
+            bb.Name = "ESP_Name"
+            bb.Size = UDim2.new(0, 200, 0, 40)
+            bb.StudsOffset = Vector3.new(0, 3, 0)
+            bb.AlwaysOnTop = true
+            bb.Parent = char
+            
+            local nameLbl = Instance.new("TextLabel")
+            nameLbl.Name = "Name"
+            nameLbl.Size = UDim2.new(1, 0, 0.6, 0)
+            nameLbl.BackgroundTransparency = 1
+            nameLbl.Text = targetPlayer.Name
+            nameLbl.TextColor3 = Settings.ESPColor
+            nameLbl.TextStrokeTransparency = 0
+            nameLbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            nameLbl.TextScaled = true
+            nameLbl.Font = Enum.Font.GothamBold
+            nameLbl.Parent = bb
+            
+            local distLbl = Instance.new("TextLabel")
+            distLbl.Name = "Distance"
+            distLbl.Size = UDim2.new(1, 0, 0.4, 0)
+            distLbl.Position = UDim2.new(0, 0, 0.6, 0)
+            distLbl.BackgroundTransparency = 1
+            distLbl.Text = "0m"
+            distLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+            distLbl.TextStrokeTransparency = 0
+            distLbl.TextScaled = true
+            distLbl.Font = Enum.Font.Gotham
+            distLbl.Parent = bb
+            
+            data.NameTag = bb
+            data.NameLabel = nameLbl
+            data.DistanceLabel = distLbl
+        end
+        data.NameTag.Enabled = true
+        data.NameTag.Adornee = head
+        data.NameLabel.Text = targetPlayer.Name
+        data.NameLabel.TextColor3 = Settings.ESPColor
+        data.NameLabel.Visible = Settings.ShowName
+        data.DistanceLabel.Visible = Settings.ShowDistance
+        
+        if myRoot then
+            local dist = (myRoot.Position - hrp.Position).Magnitude
+            data.DistanceLabel.Text = string.format("%.0f m", dist)
+        end
+        
+        -- Health Bar
+        if not data.HealthTag then
+            local hb = Instance.new("BillboardGui")
+            hb.Name = "ESP_Health"
+            hb.Size = UDim2.new(0, 100, 0, 8)
+            hb.StudsOffset = Vector3.new(0, -3.5, 0)
+            hb.AlwaysOnTop = true
+            hb.Parent = char
+            
+            local bg = Instance.new("Frame")
+            bg.Size = UDim2.new(1, 0, 1, 0)
+            bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            bg.BorderSizePixel = 0
+            bg.Parent = hb
+            
+            local hbCorner = Instance.new("UICorner")
+            hbCorner.CornerRadius = UDim.new(1, 0)
+            hbCorner.Parent = bg
+            
+            local fill = Instance.new("Frame")
+            fill.Size = UDim2.new(1, 0, 1, 0)
+            fill.BackgroundColor3 = Color3.fromRGB(80, 200, 80)
+            fill.BorderSizePixel = 0
+            fill.Parent = bg
+            
+            local fillCorner = Instance.new("UICorner")
+            fillCorner.CornerRadius = UDim.new(1, 0)
+            fillCorner.Parent = fill
+            
+            data.HealthTag = hb
+            data.HealthBar = fill
+        end
+        data.HealthTag.Enabled = Settings.ShowHealth
+        data.HealthTag.Adornee = head
+        
+        local hpRatio = humanoid.Health / humanoid.MaxHealth
+        data.HealthBar.Size = UDim2.new(hpRatio, 0, 1, 0)
+        data.HealthBar.BackgroundColor3 = Color3.fromRGB(
+            math.floor(255 * (1 - hpRatio)),
+            math.floor(255 * hpRatio),
+            0
+        )
+    end
+end)
+
+-- ==========================================
+-- 📨 รับข้อมูลจาก Server
+-- ==========================================
+Remote.OnClientEvent:Connect(function(action, ...)
+    if action == "HitConfirm" then
+        local targetName, damage = ...
+        print("[Hit] " .. targetName .. " -" .. damage .. "HP")
+    end
+end)
